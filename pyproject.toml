@@ -30,6 +30,10 @@ packages = ["services", "agents", "workflows", "execution", "app"]
 [tool.hatch.build.targets.wheel.force-include]
 "cli.py" = "cli.py"
 "mcp_server.py" = "mcp_server.py"
+# Artifact templates are loaded at runtime (and at import time by
+# services.product_input). Ship them at the wheel root so the loader's path
+# (site-packages/templates/) resolves in an installed environment.
+"templates" = "templates"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
