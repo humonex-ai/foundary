@@ -24,7 +24,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["services", "agents", "workflows", "execution", "app"]
-include = ["cli.py", "mcp_server.py"]
+
+# Top-level entry-point modules placed at the wheel root so they are importable
+# (the console scripts reference `cli:main` / `mcp_server:main`).
+[tool.hatch.build.targets.wheel.force-include]
+"cli.py" = "cli.py"
+"mcp_server.py" = "mcp_server.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
