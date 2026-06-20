@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from app import projects as app_projects
 from execution import parse
 from execution import sync as sync_mod
 from services.artifacts import read_artifact
@@ -39,20 +40,21 @@ def _repo(args, config: Config) -> str:
 
 
 def cmd_sync(args) -> int:
+    # Delegates to the single shared export path (guard + sync + record).
     config = Config.from_env()
     repo = _repo(args, config)
-    work_orders, decisions = _load(config, args.project)
-    report = sync_mod.sync(
-        args.project, repo, work_orders, decisions, _github(config),
-        dry_run=args.dry_run, reconcile=args.reconcile,
+    result = app_projects.export(
+        config, args.project, repo, gh=_github(config),
+        dry_run=args.dry_run, reconcile=args.reconcile, via="cli",
     )
+    if result.get("refused_reason"):
+        print(f"refused: {result['refused_reason']}")
+        return 1
     prefix = "[dry-run] " if args.dry_run else ""
-    for a in report.actions:
-        num = f"#{a.number}" if a.number else "(new)"
-        print(f"{prefix}{a.action:15} {a.wo_id or '-':8} {num:6} {a.note}")
-    counts = {}
-    for a in report.actions:
-        counts[a.action] = counts.get(a.action, 0) + 1
+    for a in result.get("actions", []):
+        num = f"#{a['number']}" if a.get("number") else "(new)"
+        print(f"{prefix}{a['action']:15} {a['wo_id'] or '-':8} {num:6} {a['note']}")
+    counts = result.get("summary", {})
     print("summary:", ", ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "nothing")
     return 0
 

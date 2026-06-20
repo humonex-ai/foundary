@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app import ingest as ingest_app
 from app import projects as app
 from services.config import Config
 
@@ -27,8 +28,20 @@ def list_projects() -> list[dict[str, str]]:
 
 
 def create_project(name: str, product_input: str) -> dict[str, Any]:
-    """Create a project from a complete Product Input and generate all artifacts."""
+    """[LEGACY GENERATOR] Generate all artifacts internally from a Product Input
+    via the LLM. Prefer `submit_project` (the primary, system-of-record path).
+    This path is compatibility-only and pending retirement; it requires
+    ANTHROPIC_API_KEY."""
     return app.create_project(_cfg(), name, product_input)
+
+
+def submit_project(name: str, artifacts: dict[str, str]) -> dict[str, Any]:
+    """[PRIMARY] Store client-authored artifacts (vision/architecture/roadmap/
+    work-orders, optional product-input) as a project after structural + reference
+    validation. This is the recommended path: your chat (Claude/ChatGPT/Codex)
+    authors the artifacts, Foundry validates, records, gates, and syncs them. No
+    internal LLM — needs no ANTHROPIC_API_KEY."""
+    return ingest_app.submit_project(_cfg(), name, artifacts)
 
 
 def show_project(name: str, artifact: str | None = None) -> dict[str, Any]:
@@ -37,7 +50,9 @@ def show_project(name: str, artifact: str | None = None) -> dict[str, Any]:
 
 
 def regenerate(name: str, from_stage: str) -> dict[str, Any]:
-    """Re-run the chain from a stage to the end; marks Stale if an approved plan changed."""
+    """[LEGACY GENERATOR] Re-run the LLM chain from a stage to the end. Obsolete
+    under the system-of-record path — regenerate in your chat and re-submit via
+    `submit_project` instead. Requires ANTHROPIC_API_KEY."""
     return app.regenerate(_cfg(), name, from_stage)
 
 
@@ -47,14 +62,16 @@ def approve_project(name: str) -> dict[str, Any]:
 
 
 def sync_github(name: str, repo: str) -> dict[str, Any]:
-    """Sync Work Orders to GitHub Issues. Refused unless the plan is Approved and unchanged."""
-    return app.sync_github(_cfg(), name, repo)
+    """Export Work Orders to GitHub Issues. Refused unless the plan is Approved and
+    unchanged. Delegates to the single shared export path."""
+    return app.export(_cfg(), name, repo, via="mcp")
 
 
 # Adapter surface: tool name -> callable. Single source of truth for registration.
 TOOLS = {
     "list_projects": list_projects,
     "create_project": create_project,
+    "submit_project": submit_project,
     "show_project": show_project,
     "regenerate": regenerate,
     "approve_project": approve_project,

@@ -167,35 +167,51 @@ def test_approve_records_fingerprint(tmp_path):
     assert res["approved_at"]
 
 
-def test_sync_refused_when_draft(tmp_path):
+def test_export_refused_when_draft(tmp_path):
     cfg = _cfg(tmp_path)
     write_artifact(cfg, "acme", S.PLAN_ARTIFACT, REAL_WO)
     gh = FakeGitHub()
-    res = app.sync_github(cfg, "acme", "o/r", gh=gh)
+    res = app.export(cfg, "acme", "o/r", gh=gh, via="mcp")
     assert res["synced"] is False
     assert "Draft" in res["refused_reason"]
     assert gh.writes == []
 
 
-def test_sync_succeeds_when_approved(tmp_path):
+def test_export_succeeds_when_approved_records_export(tmp_path):
     cfg = _cfg(tmp_path)
     write_artifact(cfg, "acme", S.PLAN_ARTIFACT, REAL_WO)
     app.approve_project(cfg, "acme")
     gh = FakeGitHub()
-    res = app.sync_github(cfg, "acme", "o/r", gh=gh)
+    res = app.export(cfg, "acme", "o/r", gh=gh, via="cli")
     assert res["synced"] is True
-    assert res["state"] == S.SYNCED
+    assert res["state"] == S.APPROVED  # export does not change lifecycle
     assert res["summary"].get("create") == 1
+    # export recorded with via and the approved fingerprint
+    st = S.load_state(cfg, "acme")
+    assert st.exports[-1]["via"] == "cli"
+    assert st.exports[-1]["ref"] == "o/r"
+    assert st.exports[-1]["fingerprint"] == st.approved_fingerprint
 
 
-def test_sync_refused_when_plan_changed_after_approval(tmp_path):
+def test_export_dry_run_records_nothing(tmp_path):
     cfg = _cfg(tmp_path)
     write_artifact(cfg, "acme", S.PLAN_ARTIFACT, REAL_WO)
     app.approve_project(cfg, "acme")
-    # Structural change (Goal differs) -> diverges from approved fingerprint.
+    gh = FakeGitHub()
+    res = app.export(cfg, "acme", "o/r", gh=gh, dry_run=True, via="cli")
+    assert res["synced"] is False and res["dry_run"] is True
+    assert S.load_state(cfg, "acme").exports == []  # no record on dry-run
+    assert S.load_state(cfg, "acme").lifecycle == S.APPROVED
+
+
+def test_export_refused_when_plan_changed_after_approval(tmp_path):
+    cfg = _cfg(tmp_path)
+    write_artifact(cfg, "acme", S.PLAN_ARTIFACT, REAL_WO)
+    app.approve_project(cfg, "acme")
     write_artifact(cfg, "acme", S.PLAN_ARTIFACT, REAL_WO.replace("ship the thing", "ship something else"))
     gh = FakeGitHub()
-    res = app.sync_github(cfg, "acme", "o/r", gh=gh)
+    res = app.export(cfg, "acme", "o/r", gh=gh, via="mcp")
     assert res["synced"] is False
     assert "differs" in res["refused_reason"]
     assert gh.writes == []
+    assert S.load_state(cfg, "acme").exports == []

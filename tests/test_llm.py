@@ -2,7 +2,7 @@
 
 import pytest
 
-from services.config import Config
+from services.config import Config, ConfigError
 from services.llm import LLMClient, LLMError
 
 
@@ -39,6 +39,19 @@ class FakeClient:
 
 def _config():
     return Config(anthropic_api_key="sk-test", model="claude-sonnet-4-6")
+
+
+def test_real_client_without_key_raises():
+    # No injected client + empty key -> clear ConfigError at construction.
+    with pytest.raises(ConfigError, match="ANTHROPIC_API_KEY is required"):
+        LLMClient(Config(anthropic_api_key=""))
+
+
+def test_injected_client_needs_no_key():
+    # Tests/primary code inject a client and never need a key.
+    client = FakeClient(response=_Response([_Block("text", "ok")]))
+    llm = LLMClient(Config(anthropic_api_key=""), client=client)
+    assert llm.complete("p") == "ok"
 
 
 def test_complete_returns_text():

@@ -13,9 +13,9 @@ dist/
 # uv
 .uv/
 
-# Per-project mutable lifecycle state (MCP V1) — local, not source of truth
-.foundry-state.json
-projects/*/.foundry-state.json
+# Legacy local state + its migration backup (record.json is the tracked record).
+.foundry-state.json*
+projects/*/.foundry-state.json*
 
 # Generated artifacts (per-project output; D-008). The dogfood reference
 # projects are committed; other generated runs are not.

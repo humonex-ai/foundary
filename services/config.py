@@ -31,7 +31,10 @@ class ConfigError(RuntimeError):
 class Config(BaseModel):
     """Resolved configuration for the services layer."""
 
-    anthropic_api_key: str = Field(..., min_length=1)
+    # Optional: consumed ONLY by the legacy generator (create_project/regenerate)
+    # via LLMClient. The primary system-of-record path does not need it
+    # (`06-decisions.md` D-013). Enforced at point of use in services.llm.
+    anthropic_api_key: str = ""
     model: str = DEFAULT_MODEL
     projects_dir: Path = Field(default=Path(DEFAULT_PROJECTS_DIR))
     # Execution V1 (GitHub Issue sync). Optional — only the GitHub commands need
@@ -43,20 +46,16 @@ class Config(BaseModel):
     def from_env(cls, env: dict[str, str] | None = None) -> "Config":
         """Build a ``Config`` from environment variables.
 
-        Reads ``ANTHROPIC_API_KEY`` (required), ``FOUNDRY_MODEL`` (optional),
-        ``FOUNDRY_PROJECTS_DIR`` (optional), and for Execution V1
-        ``GITHUB_TOKEN`` / ``FOUNDRY_DEFAULT_REPO`` (optional). ``env`` defaults
-        to ``os.environ``; pass a dict to load from an explicit mapping (tests).
+        All variables are optional. ``ANTHROPIC_API_KEY`` is consumed only by the
+        legacy generator (enforced at point of use in :mod:`services.llm`), so its
+        absence does not prevent startup or the primary path. Also reads
+        ``FOUNDRY_MODEL``, ``FOUNDRY_PROJECTS_DIR``, ``GITHUB_TOKEN``,
+        ``FOUNDRY_DEFAULT_REPO``. ``env`` defaults to ``os.environ``; pass a dict
+        to load from an explicit mapping (tests).
         """
         source = os.environ if env is None else env
 
         api_key = source.get("ANTHROPIC_API_KEY", "").strip()
-        if not api_key:
-            raise ConfigError(
-                "ANTHROPIC_API_KEY is not set. Copy .env.example to .env and "
-                "fill it in, or export the variable."
-            )
-
         model = source.get("FOUNDRY_MODEL", "").strip() or DEFAULT_MODEL
         projects_dir = source.get("FOUNDRY_PROJECTS_DIR", "").strip() or DEFAULT_PROJECTS_DIR
 

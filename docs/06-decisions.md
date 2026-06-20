@@ -214,3 +214,78 @@ artifact templates replace their free-prose "## Open Questions" section with a
 Questions section that seeds the list. No new artifact, agent, or architecture
 (`02-architecture.md`, Template Strategy). Solo-founder scope: no review/approval
 workflow, no severity matrix, no deadlines beyond the Blocks link.
+
+---
+
+## D-013 — Foundry's strategic direction is System of Record; internal generation is compatibility-only
+
+**Status:** Accepted
+**Date:** 2026-06-20
+**Decision:** Foundry's long-term identity is a planning + decision + delivery
+**system of record**, not a plan generator. The **primary** path is
+`submit_project` (`app/ingest.py`): the founder's client LLM (Claude / ChatGPT /
+Codex) authors the artifacts, and Foundry validates, records, fingerprints,
+approves, gates, and syncs them — with **no internal LLM**. The internal
+generator (`create_project` / `regenerate`, backed by `agents/`,
+`services/llm.py`, `workflows/chain.py`, and the Anthropic SDK) is **legacy /
+compatibility only, pending retirement**.
+**Why:** The actual workflow is "brainstorm in a capable client, then call
+Foundry." The internal generator produced a weaker, one-shot *second* plan after
+the founder already planned interactively, and its nondeterminism drove the
+approval churn that V1.6 had to fix. Plan generation is commoditized; **plan
+governance** (decisions, approval, traceability, sync) is the durable,
+differentiated value. Dogfooding `submit_project` across three client-authored
+projects confirmed deterministic validation is sufficient for the governance
+spine, with less churn, fewer dependencies, and a clearer mental model.
+**Consequence (this phase — Phase 1, labeling only):** `submit_project` is
+documented and described as PRIMARY; `create_project`/`regenerate` are labeled
+LEGACY in their MCP tool and code docstrings; `ANTHROPIC_API_KEY` is required
+**only** for the legacy generator (the primary path needs only `GITHUB_TOKEN` for
+sync). No runtime behavior, architecture, or component is removed. Retirement
+(remove `agents/`, `services/llm.py`, chain generation, Anthropic dependency) is
+**Phase 4**, gated on a coherence validator (Phase 2) and evidence that the
+primary path is the sole path in real use. Migration plan recorded separately.
+
+**Phase 1.1 (done):** `ANTHROPIC_API_KEY` is decoupled from startup. `Config`
+makes it optional and `Config.from_env` no longer raises when it is absent; the
+requirement moved to the point of use — `LLMClient` raises a clear `ConfigError`
+only when the legacy generator constructs a real client without it. The server
+boots and the primary `submit_project` path runs with no Anthropic key (only
+`GITHUB_TOKEN`, and only for `sync_github`). No generator code removed; no MCP
+surface change. Existing generator users (key set) are unaffected.
+
+---
+
+## D-014 — Lifecycle is Draft/Approved/Stale; export is metadata; record.json is the authoritative, git-tracked record
+
+**Status:** Accepted
+**Date:** 2026-06-21
+**Decision:** The project lifecycle is **Draft → Approved → Stale** only.
+`Synced` is removed: export is **not** a lifecycle state — it is metadata
+appended to the record. The project record lives in
+`projects/<name>/record.json` (renamed from the hidden `.foundry-state.json`),
+is **git-tracked** (durability/recovery via git history; Foundry performs no git
+operations — the founder commits), and carries `version`, `lifecycle`,
+`approved_fingerprint`, append-only `approvals[]`, and append-only `exports[]`
+(`{target, ref, fingerprint, at, via}`). A **single shared `app.export()`** is the
+only path that calls `execution.sync.sync`; both the MCP `sync_github` tool and
+the CLI `sync-issues` command delegate to it. `export()` enforces the export
+guard (Approved + current fingerprint == approved fingerprint), honors `dry_run`
+and `reconcile`, and records an export **only after a successful real sync**
+(duplicates from retries accepted, never deduped). Export freshness is computed
+per `(target, ref)` against `approved_fingerprint`. The MCP tool stays named
+`sync_github`; no `ExportAdapter` abstraction and no `export_github` rename until
+a real second target exists.
+**Why:** `Synced` baked one export destination into the state machine and was a
+dead state for projects that never export — contradicting the System-of-Record
+identity (D-013). Export is an event against a destination, not a stage of the
+record. A single guarded path removes a previously unguarded CLI export and the
+duplicated guard/record logic. Storing the record in git makes the
+durability/audit claims real with no new infrastructure (single founder, no DB,
+no SaaS).
+**Consequence:** `Synced`/`mark_synced`/`sync_allowed` removed
+(`sync_allowed`→`export_allowed`); writes are atomic (temp + replace); the record
+never contains secrets. Migration is lazy on load: a legacy `.foundry-state.json`
+(or a v1 `record.json`) is read, `Synced`→`Approved`, schema stamped to v2, and
+the legacy file retired to `.foundry-state.json.bak` (inactive rollback) so there
+is exactly one authoritative file. Implements the M1–M6 review modifications.

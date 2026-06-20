@@ -6,14 +6,15 @@ services map 1:1 to the MCP V1 tools.
 
 from __future__ import annotations
 
+from app.ingest import IngestError, submit_project, validate_artifacts
 from app.projects import (
     ProjectSummary,
     approve_project,
     create_project,
+    export,
     list_projects,
     regenerate,
     show_project,
-    sync_github,
 )
 
 __all__ = [
@@ -23,5 +24,8 @@ __all__ = [
     "show_project",
     "regenerate",
     "approve_project",
-    "sync_github",
+    "export",
+    "submit_project",
+    "validate_artifacts",
+    "IngestError",
 ]

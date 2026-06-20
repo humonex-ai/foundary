@@ -41,7 +41,11 @@ def list_projects(config: Config) -> list[ProjectSummary]:
 def create_project(
     config: Config, name: str, product_input_md: str, *, llm: LLMClient | None = None
 ) -> dict:
-    """Create a project from a complete Product Input and generate all artifacts.
+    """[LEGACY / COMPATIBILITY] Generate all artifacts internally via the LLM.
+
+    Superseded by the system-of-record path (`app.ingest.submit_project`); kept for
+    compatibility, pending retirement (`06-decisions.md` D-013). Requires an
+    Anthropic key.
 
     Writes ``product-input.md``, validates it (fails clearly on missing
     sections), runs the full chain, and marks the project Draft. The Product
@@ -83,8 +87,11 @@ def show_project(config: Config, name: str, artifact: str | None = None) -> dict
 def regenerate(
     config: Config, name: str, from_stage: str, *, llm: LLMClient | None = None
 ) -> dict:
-    """Re-run the chain from ``from_stage`` to the end; flip to Stale if the plan
-    changed after approval."""
+    """[LEGACY / COMPATIBILITY] Re-run the LLM chain from ``from_stage`` to the end;
+    flip to Stale if the plan changed after approval.
+
+    Obsolete under the system-of-record path — regenerate in the client and
+    re-submit via `app.ingest.submit_project` (`06-decisions.md` D-013)."""
     if from_stage not in STAGE_NAMES:
         raise ValueError(
             f"Unknown stage {from_stage!r}. Valid: {', '.join(STAGE_NAMES)}"
@@ -109,23 +116,56 @@ def approve_project(config: Config, name: str) -> dict:
     }
 
 
-def sync_github(config: Config, name: str, repo: str, *, gh=None) -> dict:
-    """Guarded GitHub issue sync: only an Approved, unchanged plan may sync."""
-    allowed, reason = state_mod.sync_allowed(config, name)
+def export(
+    config: Config,
+    name: str,
+    repo: str,
+    *,
+    gh=None,
+    dry_run: bool = False,
+    reconcile: bool = False,
+    via: str = "mcp",
+) -> dict:
+    """The single guarded export path (M1). Both the MCP `sync_github` tool and
+    the CLI `sync-issues` command delegate here; nothing else calls
+    ``execution.sync.sync``.
+
+    Enforces the export guard (Approved + current fingerprint == approved), runs
+    the GitHub issue sync (honoring ``dry_run`` and ``reconcile``), and — only on
+    a successful real (non-dry-run) sync — records an export event. Lifecycle is
+    not changed by export.
+    """
+    allowed, reason = state_mod.export_allowed(config, name)
     if not allowed:
-        return {"name": name, "synced": False, "refused_reason": reason,
+        return {"name": name, "synced": False, "dry_run": dry_run,
+                "refused_reason": reason,
                 "state": state_mod.load_state(config, name).lifecycle}
 
     md = artifacts.read_artifact(config, name, get_template("work-orders").output_filename)
     work_orders = parse_work_orders(md)
     decisions = parse_decisions(md)
     client = gh if gh is not None else _github_client(config)
-    report = exec_sync.sync(name, repo, work_orders, decisions, client)
-    st = state_mod.mark_synced(config, name)
+    report = exec_sync.sync(name, repo, work_orders, decisions, client,
+                            dry_run=dry_run, reconcile=reconcile)
+
+    if not dry_run:
+        state_mod.record_export(
+            config, name, target="github", ref=repo,
+            fingerprint=state_mod.plan_fingerprint(config, name), via=via,
+        )
+
     counts: dict[str, int] = {}
     for a in report.actions:
         counts[a.action] = counts.get(a.action, 0) + 1
-    return {"name": name, "synced": True, "state": st.lifecycle, "summary": counts}
+    return {
+        "name": name,
+        "synced": not dry_run,
+        "dry_run": dry_run,
+        "state": state_mod.load_state(config, name).lifecycle,
+        "summary": counts,
+        "actions": [{"action": a.action, "wo_id": a.wo_id, "number": a.number,
+                     "note": a.note} for a in report.actions],
+    }
 
 
 def _github_client(config: Config):

@@ -63,6 +63,43 @@ LLM rewording / reformatting no longer invalidates approval; structural or
 decision changes still do; an unparseable plan yields a sentinel that refuses
 sync. Lifecycle, MCP tools, and state are unchanged.
 
+**Model B (system-of-record) — ingest path** added as the first step toward making
+Foundry a planning/delivery system of record rather than a generation engine. A new
+MCP tool `submit_project` (over `app/ingest.py`) accepts client-authored artifacts
+(vision/architecture/roadmap/work-orders, optional product-input), validates them
+deterministically — required `##` sections per template, Work Orders parse, and
+WO-dependency / Decision-blocks reference real WO ids — then stores them through the
+same state/fingerprint/approval machinery (new project → Draft; approved+changed →
+Stale). No internal LLM on this path. The generator (`create_project`) is untouched
+and runs in parallel; this milestone tests whether deterministic validation is
+sufficient before the generator is retired to a compatibility layer (strategic
+direction: commit to system-of-record).
+
+**Migration Phase 1 (primary-path switch)** is done — labeling/docs only, no
+runtime change (`06-decisions.md` D-013). `submit_project` is marked PRIMARY and
+`create_project`/`regenerate` LEGACY in their MCP tool and app docstrings. README
+is the install/usage doc (Claude Code + Codex one-liners; primary path uses only
+`GITHUB_TOKEN`). `.env.example` clarifies `ANTHROPIC_API_KEY` is consumed only by
+the legacy generator.
+
+**System-of-Record lifecycle (D-014, done):** lifecycle is now
+**Draft → Approved → Stale** (`Synced` removed). Export is metadata, not a state:
+a single shared `app.export()` (the only caller of `execution.sync.sync`) is
+delegated to by both the MCP `sync_github` tool and the CLI `sync-issues`
+command; it enforces the export guard, honors `dry_run`/`reconcile`, and appends
+to an append-only `exports[]` log only after a successful real sync. The record
+moved to git-tracked `projects/<name>/record.json` (atomic writes; never holds
+secrets; legacy `.foundry-state.json` lazily migrated and retired to `.bak`).
+185 tests pass.
+
+**Migration Phase 1.1 (done):** `ANTHROPIC_API_KEY` decoupled from startup.
+`Config.anthropic_api_key` is optional and `from_env` no longer raises when it is
+absent; `LLMClient` enforces it at point of use (clear `ConfigError` only when the
+legacy generator builds a real client without it). The MCP server boots and the
+primary `submit_project` path runs with **no Anthropic key** — verified. Existing
+generator users (key set) unaffected. Phases 2 (coherence validator), 3 (delivery
+management), 4 (generator retirement) planned, not started.
+
 ## Direction Documents
 
 | Document | State |

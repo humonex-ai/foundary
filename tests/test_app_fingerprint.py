@@ -99,7 +99,7 @@ def test_unparseable_after_approval_refuses_sync(tmp_path):
     cfg = _cfg(tmp_path)
     write_artifact(cfg, "p", S.PLAN_ARTIFACT, PLAN)
     S.approve(cfg, "p")
-    # Plan becomes unparseable after approval -> sync refused (not silently passed).
+    # Plan becomes unparseable after approval -> export refused (not silently passed).
     write_artifact(cfg, "p", S.PLAN_ARTIFACT, "broken now\n")
-    ok, reason = S.sync_allowed(cfg, "p")
+    ok, reason = S.export_allowed(cfg, "p")
     assert not ok and "parse" in reason

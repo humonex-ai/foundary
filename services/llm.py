@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.config import Config
+from services.config import Config, ConfigError
 
 # Conservative default cap on a single completion. Overridable per call.
 DEFAULT_MAX_TOKENS = 8192
@@ -32,6 +32,15 @@ class LLMClient:
         if client is not None:
             self._client = client
         else:
+            # Point-of-use guard: the Anthropic key is required only here, on the
+            # legacy generator path. The primary system-of-record path never
+            # constructs a real client (`06-decisions.md` D-013).
+            if not config.anthropic_api_key:
+                raise ConfigError(
+                    "ANTHROPIC_API_KEY is required for the legacy generator tools "
+                    "create_project/regenerate. The primary submit_project path "
+                    "does not require it."
+                )
             # Imported lazily so the rest of the services layer (config, artifact
             # I/O) is usable without the anthropic package installed.
             from anthropic import Anthropic
