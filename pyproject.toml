@@ -1,0 +1,30 @@
+[project]
+name = "foundry"
+version = "0.1.0"
+description = "AI CTO Office — turns a Product Input into coherent direction artifacts."
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.40",
+    "pydantic>=2.6",
+    "mcp>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+foundry = "cli:main"
+foundry-mcp = "mcp_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["services", "agents", "workflows", "execution", "app"]
+include = ["cli.py", "mcp_server.py"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
