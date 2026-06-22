@@ -38,9 +38,17 @@ mkdir -p .claude/skills && cp -r skills/foundry-spec .claude/skills/
 ```bash
 cd skills && zip -r foundry-spec.zip foundry-spec
 ```
-Upload `foundry-spec.zip` in Settings → Capabilities → Skills. Runs ideation +
-authoring; materialize via Branch B (emits files to submit locally), since the
-local Foundry MCP isn't reachable from the web.
+Upload `foundry-spec.zip` in Settings → Capabilities → Skills (needs a plan with
+Skills + code execution). Runs ideation + authoring; materialize via Branch B
+(emits files to submit locally), since the local Foundry MCP isn't reachable from
+the web.
+
+**How to call it on Claude web:** there is no `/slash` command — skills are
+auto-invoked by description match. Just describe the task in a chat: "Make this a
+Foundry project", "Write the Foundry project spec for <idea>". The skill authors
+the four artifacts as labeled code blocks; save them to a folder and run
+`foundry submit <name> --dir <folder>` locally to validate + record, then approve
+and `sync_github` via the MCP in Claude Code.
 
 **ChatGPT — no native Skills.** Closest equivalent: a Custom GPT (or a Project's
 custom instructions). Paste `foundry-spec/SKILL.md` as the instructions and
