@@ -44,10 +44,15 @@ def _expected_sections(key: str) -> list[str]:
     return body_sections(key)
 
 
-def _filename(key: str) -> str:
+def artifact_filename(key: str) -> str:
+    """Return the on-disk filename for an artifact key (e.g. ``00-vision.md``)."""
     if key == "product-input":
         return product_input.PRODUCT_INPUT_FILENAME
     return get_template(key).output_filename
+
+
+# Backwards-compatible private alias (used within this module).
+_filename = artifact_filename
 
 
 def validate_artifacts(submitted: dict[str, str]) -> list[str]:

@@ -1,8 +1,9 @@
 """Foundry CLI (Execution V1).
 
-Two read-or-sync commands over GitHub Issues. Plain argparse, no framework
-(`06-decisions.md` D-010).
+Commands over the local project record and GitHub Issues. Plain argparse, no
+framework (`06-decisions.md` D-010).
 
+    foundry submit       <project> [--dir PATH]
     foundry sync-issues  <project> --repo owner/repo [--dry-run] [--reconcile]
     foundry issue-status <project> --repo owner/repo
 """
@@ -11,7 +12,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
+from app import ingest as ingest_app
 from app import projects as app_projects
 from execution import parse
 from execution import sync as sync_mod
@@ -37,6 +40,31 @@ def _repo(args, config: Config) -> str:
     if not repo:
         raise SystemExit("error: --repo owner/name required (or set FOUNDRY_DEFAULT_REPO)")
     return repo
+
+
+def cmd_submit(args) -> int:
+    # Materialize client-authored artifact files into a validated Foundry record
+    # (the local twin of the MCP `submit_project` tool). Reads the known artifact
+    # files from a directory and runs the same deterministic validation.
+    config = Config.from_env()
+    src = Path(args.dir) if args.dir else (config.projects_dir / args.project)
+    artifacts: dict[str, str] = {}
+    for key in ingest_app.ALL_KEYS:
+        path = src / ingest_app.artifact_filename(key)
+        if path.is_file():
+            artifacts[key] = path.read_text(encoding="utf-8")
+    if not artifacts:
+        raise SystemExit(f"error: no artifact files found in {src}")
+    try:
+        res = ingest_app.submit_project(config, args.project, artifacts)
+    except ingest_app.IngestError as exc:
+        print("validation failed — nothing written:")
+        for p in exc.problems:
+            print(f"  - {p}")
+        return 1
+    print(f"submitted: {res['name']} [{res['state']}]")
+    print("written:", ", ".join(res["written"]))
+    return 0
 
 
 def cmd_sync(args) -> int:
@@ -76,6 +104,11 @@ def cmd_status(args) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="foundry", description="Foundry CLI")
     sub = p.add_subparsers(dest="command", required=True)
+
+    sm = sub.add_parser("submit", help="Validate + record client-authored artifact files")
+    sm.add_argument("project")
+    sm.add_argument("--dir", default="", help="source dir (default: <projects_dir>/<project>)")
+    sm.set_defaults(func=cmd_submit)
 
     s = sub.add_parser("sync-issues", help="Sync Work Orders to GitHub Issues")
     s.add_argument("project")

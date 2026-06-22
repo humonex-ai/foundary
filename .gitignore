@@ -23,3 +23,6 @@ projects/*
 !projects/foundry/
 !projects/ai-investment-firm/
 !projects/simple-todo-app/
+
+# skill web-upload bundle (regenerate with: cd skills && zip -r foundry-spec.zip foundry-spec)
+skills/*.zip
