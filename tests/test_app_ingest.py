@@ -164,6 +164,39 @@ def test_submitted_project_approves_and_exports(tmp_path):
     assert res["summary"].get("create") == 2  # WO-001, WO-002
 
 
+def test_get_templates_returns_canonical_shapes():
+    t = app.get_templates()
+    assert set(t) == {"product-input", "vision", "architecture", "roadmap", "work-orders"}
+    # Work Orders template must show the Decision List pipe-table + Depends on field.
+    wo = t["work-orders"]
+    assert "## Decision List" in wo and "| ID | Decision |" in wo
+    assert "Depends on" in wo
+    # Single-key selection works.
+    assert set(app.get_templates("vision")) == {"vision"}
+
+
+def test_bullet_decision_list_rejected(tmp_path):
+    cfg = _cfg(tmp_path)
+    sub = _full()
+    # Replace the pipe-table Decision List with a bullet list (the real failure).
+    sub["work-orders"] = WORK_ORDERS.split("## Decision List")[0] + (
+        "## Decision List\n"
+        "- D1 — Universe fixed to Nifty 50. Rationale: scope.\n"
+        "- D2 — Rule-based score, not ML.\n"
+    )
+    with pytest.raises(ingest.IngestError) as exc:
+        ingest.submit_project(cfg, "acme", sub)
+    assert any("Decision List has entries but none parsed" in p for p in exc.value.problems)
+
+
+def test_empty_decision_list_is_allowed(tmp_path):
+    cfg = _cfg(tmp_path)
+    sub = _full()
+    # A genuinely empty Decision List (header only) must NOT be rejected.
+    sub["work-orders"] = WORK_ORDERS.split("## Decision List")[0] + "## Decision List\n\nNone.\n"
+    assert ingest.validate_artifacts(sub) == []
+
+
 def test_optional_product_input_validated_when_present(tmp_path):
     cfg = _cfg(tmp_path)
     sub = _full()

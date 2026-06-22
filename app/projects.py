@@ -14,7 +14,13 @@ from execution.parse import parse_decisions, parse_work_orders
 from services import artifacts, product_input
 from services.config import Config
 from services.llm import LLMClient
-from services.templates import TEMPLATES, get_template
+from services.templates import (
+    TEMPLATES,
+    TemplateError,
+    get_template,
+    load_template,
+    template_keys,
+)
 from workflows.chain import STAGE_NAMES, run_chain
 
 # Artifact keys the founder can read via show_project.
@@ -28,6 +34,24 @@ _ARTIFACT_KEYS = {
 class ProjectSummary:
     name: str
     lifecycle: str
+
+
+def get_templates(artifact: str | None = None) -> dict[str, str]:
+    """Return the canonical artifact templates so a client authors the exact
+    shape ``submit_project`` expects — required sections, the Decision List
+    pipe-table, and the per-Work-Order fields (incl. ``Depends on:``).
+
+    ``artifact`` selects one key (product-input/vision/architecture/roadmap/
+    work-orders); omit it for all. Read these before authoring artifacts.
+    """
+    keys = template_keys() if artifact is None else [artifact]
+    out: dict[str, str] = {}
+    for key in keys:
+        try:
+            out[key] = load_template(key)
+        except TemplateError as exc:
+            raise ValueError(str(exc)) from None
+    return out
 
 
 def list_projects(config: Config) -> list[ProjectSummary]:

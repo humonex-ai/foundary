@@ -12,6 +12,8 @@ validation is sufficient to guarantee plan quality without generation.
 
 from __future__ import annotations
 
+import re
+
 from app import state as state_mod
 from execution.parse import ParseError, parse_decisions, parse_work_orders
 from services import artifacts, product_input
@@ -92,8 +94,33 @@ def validate_artifacts(submitted: dict[str, str]) -> list[str]:
                 for blocked in d.blocks:
                     if blocked not in ids:
                         problems.append(f"work-orders: decision {d.id} blocks unknown {blocked}")
+            # Reject a Decision List that has entries but isn't in the parseable
+            # pipe-table form (e.g. bullets like "- D1 — ..."), so decisions are
+            # never silently invisible to the gates.
+            if not decisions and _decision_list_has_entries(wo_md):
+                problems.append(
+                    "work-orders: Decision List has entries but none parsed — use the "
+                    "pipe-table format with `D-NNN` ids (columns: ID | Decision | "
+                    "Owner | Type | Status | Blocks | Rationale). See get_templates."
+                )
 
     return problems
+
+
+_DECISION_HEADER_RE = re.compile(
+    r"^##\s+Decision List\s*$(.*?)(?=^##\s+|\Z)", re.MULTILINE | re.DOTALL
+)
+# Anything that looks like a decision id (D1, D-001, D 1) in the section body.
+_LOOKS_LIKE_DECISION_RE = re.compile(r"\bD-?\s?\d")
+
+
+def _decision_list_has_entries(wo_md: str) -> bool:
+    """True if the Decision List section appears to contain decision entries
+    (text resembling D-ids) — used to flag a present-but-unparseable list."""
+    m = _DECISION_HEADER_RE.search(wo_md)
+    if not m:
+        return False
+    return bool(_LOOKS_LIKE_DECISION_RE.search(m.group(1)))
 
 
 def submit_project(config: Config, name: str, submitted: dict[str, str]) -> dict:

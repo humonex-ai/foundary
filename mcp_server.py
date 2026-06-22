@@ -35,12 +35,20 @@ def create_project(name: str, product_input: str) -> dict[str, Any]:
     return app.create_project(_cfg(), name, product_input)
 
 
+def get_templates(artifact: str | None = None) -> dict[str, str]:
+    """Return the canonical artifact templates. CALL THIS BEFORE authoring
+    artifacts for submit_project — it gives the exact required sections, the
+    Decision List pipe-table format, and the per-Work-Order fields (incl.
+    `Depends on:` and `D-NNN` decision ids). Omit `artifact` for all five."""
+    return app.get_templates(artifact)
+
+
 def submit_project(name: str, artifacts: dict[str, str]) -> dict[str, Any]:
     """[PRIMARY] Store client-authored artifacts (vision/architecture/roadmap/
     work-orders, optional product-input) as a project after structural + reference
-    validation. This is the recommended path: your chat (Claude/ChatGPT/Codex)
-    authors the artifacts, Foundry validates, records, gates, and syncs them. No
-    internal LLM — needs no ANTHROPIC_API_KEY."""
+    validation. Author artifacts from get_templates first. Your chat authors them,
+    Foundry validates, records, gates, and exports. No internal LLM — needs no
+    ANTHROPIC_API_KEY."""
     return ingest_app.submit_project(_cfg(), name, artifacts)
 
 
@@ -70,6 +78,7 @@ def sync_github(name: str, repo: str) -> dict[str, Any]:
 # Adapter surface: tool name -> callable. Single source of truth for registration.
 TOOLS = {
     "list_projects": list_projects,
+    "get_templates": get_templates,
     "create_project": create_project,
     "submit_project": submit_project,
     "show_project": show_project,

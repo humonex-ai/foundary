@@ -7,6 +7,7 @@ import mcp_server
 
 EXPECTED_TOOLS = {
     "list_projects",
+    "get_templates",
     "create_project",
     "submit_project",
     "show_project",
